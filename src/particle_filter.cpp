@@ -156,7 +156,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
       double M_x = lo_predicted[map_observations[j].id].x;
       double M_y = lo_predicted[map_observations[j].id].y;
       //calculate exponent
-      exponent= (pow((x - M_x), 2))/(2 * sig_x_pow) + (pow((y - M_y), 2))/(2 * sig_y_pow)
+      double exponent= (pow((x - M_x), 2))/(2 * sig_x_pow) + (pow((y - M_y), 2))/(2 * sig_y_pow)
 	  //calculate weight using normalization terms and exponent
 	  weight *= gauss_norm * exp(-exponent);
   	}
