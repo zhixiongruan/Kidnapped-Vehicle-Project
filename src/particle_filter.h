@@ -30,13 +30,14 @@ class ParticleFilter {
 	// Number of particles to draw
 	int num_particles; 
 	
-	
-	
 	// Flag, if filter is initialized
 	bool is_initialized;
 	
 	// Vector of weights of all particles
 	std::vector<double> weights;
+	
+	// "gen" is the random engine initialized earlier.
+	std::default_random_engine gen;
 	
 public:
 	
