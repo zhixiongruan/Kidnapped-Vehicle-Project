@@ -41,10 +41,9 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
     particles[i].theta = dist_theta(gen);
     particles[i].weight = 1.0;
   }
-    
+
   // Initialization completed
   is_initialized = true;
-
 
 }
 
@@ -54,7 +53,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
   //  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
   //  http://www.cplusplus.com/reference/random/default_random_engine/
   
-  // creates a normal (Gaussian) distribution
+  // Creates a normal (Gaussian) distribution
   normal_distribution<double> dist_x(0, std_pos[0]);
   normal_distribution<double> dist_y(0, std_pos[1]);
   normal_distribution<double> dist_theta(0, std_pos[2]);
@@ -62,7 +61,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
   // Add measurements to each particle
   for (int i = 0; i < num_particles; ++i) {
     if (fabs(yaw_rate) < 0.00001) {
-	  // avoid divide by zero
+	  // Avoid divide by zero
       particles[i].x += velocity * delta_t * cos(particles[i].theta);
       particles[i].y += velocity * delta_t * sin(particles[i].theta);
     } else {
@@ -111,80 +110,73 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
   //   3.33
   //   http://planning.cs.uiuc.edu/node99.html
   
-  /*  Weight update process
-	 *  1. Transform the observations into map coodination regarding to the 
-	 *  2. Extract the landmark, which are found in sensor range
-	 *  3. Associate the observations to the extracted landmarks
-	 *  4. Calculate weights
-	 */
-	
-  	for( int i = 0; i < num_particles; i++)
-	{
-		double x_p = particles[i].x;
-		double y_p = particles[i].y;
-		double theta_p = particles[i].theta;
-		
-		/* Transform the observations into map coodination regarding to the*/
-  		vector<LandmarkObs> TransformedObs;
-		LandmarkObs TransformObs;
-		
-		for(uint j = 0; j < observations.size(); j++)
-		{
-			TransformObs.x = cos(theta_p) * observations[j].x - sin(theta_p) * observations[j].y + x_p;
-			TransformObs.y = sin(theta_p) * observations[j].x + cos(theta_p) * observations[j].y + y_p;
-			TransformObs.id = observations[j].id;
-			TransformedObs.push_back(TransformObs);
-		}
-		
-		/* Extract the landmark, which are found in sensor range*/
-   		vector<LandmarkObs> ExtractedLandmarks;
-		LandmarkObs Landmark;
-		for(uint j = 0; j < map_landmarks.landmark_list.size(); j++)
-		{
-			double Dist = dist(x_p, y_p, map_landmarks.landmark_list[j].x_f, map_landmarks.landmark_list[j].y_f);
-			
-			if( Dist < sensor_range)
-			{
-				Landmark.x = map_landmarks.landmark_list[j].x_f;
-				Landmark.y = map_landmarks.landmark_list[j].y_f;
-				Landmark.id = map_landmarks.landmark_list[j].id_i;
-				
-				ExtractedLandmarks.push_back(Landmark);
-			}
-		}
-		
-		/* Associate the observations to the extracted landmarks*/
-		dataAssociation(ExtractedLandmarks, TransformedObs);
-		particles[i].weight = 1.0;
-		
-		/* Calculate weights */
-		for( uint j = 0; j < TransformedObs.size(); j++)
-		{
-			double x = TransformedObs[j].x;
-			double y = TransformedObs[j].y;
-			double M_x = 0;
-			double M_y = 0;
-			/* Looking for the nearest landmark from the extracted landmark*/
-			for (uint k = 0; k < ExtractedLandmarks.size(); k++)
-			{
-				if(TransformedObs[j].id == ExtractedLandmarks[k].id)
-				{
-					M_x = ExtractedLandmarks[k].x;
-					M_y = ExtractedLandmarks[k].y;
-				}
-			}
-			
-			particles[i].weight *= exp(-pow(x - M_x,2) / 2 / pow(std_landmark[0], 2) - pow(y - M_y, 2) / 2 / pow(std_landmark[1],2))
-									/ 2 / M_PI / std_landmark[0] / std_landmark[1];
-		}
-		
-	}	
+  double sig_x_pow = pow(std_landmark[0], 2);
+  double sig_y_pow = pow(std_landmark[1], 2);
+  double gauss_norm = 1.0 / (2.0 * M_PI * std_landmark[0] * std_landmark[1]);
+  
+  for( int i = 0; i < num_particles; i++){
+    double x = particles[i].x;
+    double y = particles[i].y;
+    double theta = particles[i].theta;
+    
+    // Transformed into map coordinates
+    vector<LandmarkObs> map_observations;
+  	for(uint j = 0; j < observations.size(); j++){
+      LandmarkObs lo;
+      //Transform to map x coordinate
+      lo.x = x + cos(theta) * observations[j].x - sin(theta) * observations[j].y;
+      //Transform to map y coordinate
+      lo.y = y + sin(theta) * observations[j].x + cos(theta) * observations[j].y;
+      lo.id = observations[j].id;
+      map_observations.push_back(lo);
+  	}
+  	
+    //Search for landmarks in particle range
+    vector<LandmarkObs> lo_predicted;
+  	for(uint j = 0; j < map_landmarks.landmark_list.size(); j++){
+      double d = dist(x, y, map_landmarks.landmark_list[j].x_f, map_landmarks.landmark_list[j].y_f);
+      if( d < sensor_range){
+        LandmarkObs lo;
+        lo.x = map_landmarks.landmark_list[j].x_f;
+        lo.y = map_landmarks.landmark_list[j].y_f;
+        lo.id = map_landmarks.landmark_list[j].id_i;
+        lo_predicted.push_back(lo);
+      }
+  	}
+  	
+    // Associate the observations to the landmarks
+    dataAssociation(lo_predicted, map_observations);
+  	
+    // Calculate weights 
+	double weight = 1.0;
+    for( uint j = 0; j < map_observations.size(); j++){
+      double x = map_observations[j].x;
+      double y = map_observations[j].y;
+      //We use the index of predicted measurements list as id
+      double M_x = lo_predicted[map_observations[j].id].x;
+      double M_y = lo_predicted[map_observations[j].id].y;
+      //calculate exponent
+      exponent= (pow((x - M_x), 2))/(2 * sig_x_pow) + (pow((y - M_y), 2))/(2 * sig_y_pow)
+	  //calculate weight using normalization terms and exponent
+	  weight *= gauss_norm * exp(-exponent);
+  	}
+    particles[i].weight = weight;
+    weights[i] = weight;
+  }	
 }
 
 void ParticleFilter::resample() {
 	// TODO: Resample particles with replacement with probability proportional to their weight. 
 	// NOTE: You may find std::discrete_distribution helpful here.
 	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
+	
+	// use discrete_distribution to do the resampling
+	discrete_distribution<int> dist(weights.begin(), weights.end());
+	vector<Particle> new_particles;
+	for (int i = 0; i < num_particles; i++) {
+		new_particles.push_back(particles[dist(gen)]);
+	}
+	particles = new_particles;
 
 }
 
